@@ -121,3 +121,33 @@ def test_pydantic_codec_startup(cases: str, tmp_path: Path) -> None:
         builtin_codec_startup_report(CODECS / "pets.yaml", CODECS / f"{cases}.json", tmp_path, server=True),
         CODEC_EXPECTED / f"{cases}.txt",
     )
+
+
+def test_raw_text_bytes_preserves_media_type_without_default_charset() -> None:
+    """Ensure raw text bytes do not have charset=utf-8 appended by Starlette."""
+    from datamodel_code_generator._runtime.server.responses import Declared, OperationResponses, _respond
+
+    plan = OperationResponses(responses={"200": Declared(media_type="text/plain")})
+    response = _respond(200, b"\xff\xfe\x00raw", None, plan)
+    assert response.headers["content-type"] == "text/plain"
+    assert response.body == b"\xff\xfe\x00raw"
+
+    # Declared charset is preserved as-is
+    plan_iso = OperationResponses(responses={"200": Declared(media_type="text/plain; charset=iso-8859-1")})
+    response_iso = _respond(200, b"\xff\xfe\x00raw", None, plan_iso)
+    assert response_iso.headers["content-type"] == "text/plain; charset=iso-8859-1"
+    assert response_iso.body == b"\xff\xfe\x00raw"
+
+    # String responses still receive default charset encoding
+    response_str = _respond(200, "hello", None, plan)
+    assert response_str.headers["content-type"] == "text/plain; charset=utf-8"
+    assert response_str.body == b"hello"
+
+    # Custom headers are preserved
+    response_custom = _respond(200, b"\xff\xfe\x00raw", {"X-Custom": "val"}, plan)
+    assert response_custom.headers["content-type"] == "text/plain"
+    assert response_custom.headers["x-custom"] == "val"
+
+    # Explicit content-type in headers is not overridden
+    response_override = _respond(200, b"\xff\xfe\x00raw", {"Content-Type": "text/custom"}, plan)
+    assert response_override.headers["content-type"] == "text/custom"

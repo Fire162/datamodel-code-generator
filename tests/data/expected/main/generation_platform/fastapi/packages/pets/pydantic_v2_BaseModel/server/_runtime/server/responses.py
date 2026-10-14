@@ -86,10 +86,13 @@ def _respond(status: int, body: object, headers: Mapping[str, str] | None, plan:
     if body is None or plan.head or status < _MIN_CONTENT_STATUS or status in _EMPTY_STATUSES:
         return Response(status_code=status, headers=headers)
     media_type = declared.media_type or "application/json"
-    return Response(_content(declared, media_type, body), status_code=status, media_type=media_type, headers=headers)
+    content, raw = _content(declared, media_type, body)
+    if raw and (headers is None or not any(k.lower() == "content-type" for k in headers)):
+        headers = {"content-type": media_type, **(headers or {})}
+    return Response(content, status_code=status, media_type=media_type, headers=headers)
 
 
-def _content(declared: Declared, media_type: str, body: object) -> bytes:
+def _content(declared: Declared, media_type: str, body: object) -> tuple[bytes, bool]:
     json_media = media_kind(media_type) == "json"
     if (adapter := declared.adapter) is None:
         payload = _json(jsonable_encoder(body, by_alias=True, exclude_unset=True)) if json_media else body
@@ -99,15 +102,15 @@ def _content(declared: Declared, media_type: str, body: object) -> bytes:
         except ValidationError as error:
             raise ResponseValidationError(error.errors(include_url=False)) from error
         if json_media:
-            return adapter.dump_json(value, by_alias=True, exclude_unset=True)
+            return adapter.dump_json(value, by_alias=True, exclude_unset=True), False
         payload = adapter.dump_python(value, by_alias=True)
     if isinstance(payload, bytes):
-        return payload
+        return payload, True
     if not isinstance(payload, str):
         msg = f"A {media_type} body must be a string or bytes"
         raise response_failure(msg)
     try:
-        return payload.encode(charset(media_type))
+        return payload.encode(charset(media_type)), False
     except (LookupError, UnicodeError) as error:
         msg = f"The text body cannot be encoded as {media_type}"
         raise response_failure(msg) from error
