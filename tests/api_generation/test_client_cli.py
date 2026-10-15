@@ -989,6 +989,22 @@ def test_client_cli_leftover_files_jobs(tmp_path: Path, monkeypatch: pytest.Monk
     )
 
 
+def test_client_cli_leftover_files_jobs_warning_as_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Report publication error and exit with code 2 when leftover-file warnings are treated as errors in batch mode."""
+    monkeypatch.chdir(tmp_path)
+    _copy(tmp_path, "pyproject-shared-models-jobs.toml")
+    run_main_with_args(["--all-jobs"])
+    (tmp_path / "client" / "old.py").touch()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        run_main_with_args(["--all-jobs"], capsys=capsys, expected_exit=Exit.ERROR)
+    captured = capsys.readouterr()
+    assert "Error: could not publish batch output:" in captured.err
+    assert "client: These Python files are not generated and are left in place: client/old.py" in captured.err
+
+
 def test_client_cli_shared_models_jobs(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

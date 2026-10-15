@@ -6,6 +6,7 @@ import errno
 import os
 import re
 import shutil
+import warnings
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -108,6 +109,25 @@ def test_shadowed_module_warns_in_batch_jobs(output_dir: Path, tmp_path: Path) -
         run_main_with_args(["--all-jobs", "--formatters", "builtin"])
     assert_directory_content(output_dir, EXPECTED_PATH / "stale_package")
     assert_file_content(tmp_path / "model.py", "single.py")
+
+
+def test_shadowed_module_error_in_batch_jobs(
+    output_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Batch jobs report error and exit 2 when shadowed module warning is treated as an error."""
+    _run("package", output_dir)
+    for name in ("module.json", "single.json"):
+        shutil.copyfile(INPUT_PATH / name, tmp_path / name)
+    shutil.copyfile(DATA_PATH / "config" / "pyproject_shadowed_modules.toml", tmp_path / "pyproject.toml")
+    with (
+        chdir(tmp_path),
+        warnings.catch_warnings(),
+    ):
+        warnings.simplefilter("error", UserWarning)
+        run_main_with_args(["--all-jobs", "--formatters", "builtin"], capsys=capsys, expected_exit=Exit.ERROR)
+    captured = capsys.readouterr()
+    assert "Error: could not publish batch output:" in captured.err
+    assert "The generated module is shadowed by the existing package directory" in captured.err
 
 
 @pytest.mark.parametrize("update_lock", [False, True])

@@ -2149,6 +2149,8 @@ def _run_watched_jobs(
 def _publish_or_error(
     staged_plans: Sequence[_StagedJobPlan],
     remote_locks: _RemoteLockTransaction | None = None,
+    *,
+    is_batch: bool = False,
 ) -> Exit | None:
     """Publish staged batch output, reporting an unrecoverable filesystem failure."""
     try:
@@ -2166,6 +2168,11 @@ def _publish_or_error(
     except (Error, OSError) as exc:
         print(f"Error: could not publish batch output: {exc}", file=sys.stderr)  # noqa: T201
         return Exit.ERROR
+    except Warning as exc:
+        if is_batch:
+            print(f"Error: could not publish batch output: {exc}", file=sys.stderr)  # noqa: T201
+            return Exit.ERROR
+        raise
     return None
 
 
@@ -2195,7 +2202,7 @@ def _run_jobs_text(
             return result
         if result is Exit.DIFF:
             exit_code = Exit.DIFF
-    if exit_code is Exit.OK and (publish_error := _publish_or_error(staged_plans, remote_locks)) is not None:
+    if exit_code is Exit.OK and (publish_error := _publish_or_error(staged_plans, remote_locks, is_batch=True)) is not None:
         return publish_error
     return exit_code
 
@@ -2279,7 +2286,7 @@ def _run_jobs_json(
                     )
                     batch_spool.write("\n")
 
-            if exit_code is Exit.OK and (publish_error := _publish_or_error(staged_plans, remote_locks)) is not None:
+            if exit_code is Exit.OK and (publish_error := _publish_or_error(staged_plans, remote_locks, is_batch=True)) is not None:
                 return publish_error
             batch_spool.seek(0)
             _write_batch_json_spool(batch_spool)
