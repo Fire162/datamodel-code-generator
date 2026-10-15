@@ -2202,7 +2202,10 @@ def _run_jobs_text(
             return result
         if result is Exit.DIFF:
             exit_code = Exit.DIFF
-    if exit_code is Exit.OK and (publish_error := _publish_or_error(staged_plans, remote_locks, is_batch=True)) is not None:
+    if (
+        exit_code is Exit.OK
+        and (publish_error := _publish_or_error(staged_plans, remote_locks, is_batch=True)) is not None
+    ):
         return publish_error
     return exit_code
 
@@ -2286,7 +2289,10 @@ def _run_jobs_json(
                     )
                     batch_spool.write("\n")
 
-            if exit_code is Exit.OK and (publish_error := _publish_or_error(staged_plans, remote_locks, is_batch=True)) is not None:
+            if (
+                exit_code is Exit.OK
+                and (publish_error := _publish_or_error(staged_plans, remote_locks, is_batch=True)) is not None
+            ):
                 return publish_error
             batch_spool.seek(0)
             _write_batch_json_spool(batch_spool)
